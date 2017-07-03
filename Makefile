@@ -1,5 +1,5 @@
-OBJS = tpm.o pcrtool.o md.o
-HDRS = tpm.h md.h
+OBJS = tpm12.o pcrtool.o md.o fprintpcr.o
+HDRS = tpm12.h md.h tpm_common.h
 
 ifeq ($(DEBUG),yes)
 CFLAGS = -g -DTSS_DEBUG

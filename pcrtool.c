@@ -32,7 +32,7 @@
  * files in the program, then also delete it here.
  */
 
-#include "tpm.h"
+#include "tpm12.h"
 #include "md.h"
 #include <stdbool.h>
 #include <stdio.h>
@@ -59,10 +59,10 @@ const char optstr[] = "a:bo:";
 int outputpcr(bool binary_out,
 	      FILE* fp,
 	      uint32_t pcr_index,
-	      const PCR* pcr_content)
+	      const pcr* pcr_content)
 {
   if(binary_out)
-    return fwrite((*pcr_content), sizeof(*pcr_content), 1, fp);
+    return fwrite(pcr_content->a, sizeof(pcr_content->a), 1, fp);
   else
     return fprintpcr(fp, pcr_index, pcr_content);
 }
@@ -168,11 +168,12 @@ int main(int argc, char** argv)
     return -(EXIT_FAILURE);
   }
 
-  TSS_BASIC_HANDLES bh = {0, 0};
+  const pcr_vtbl* t = &tpm12_pcr_vtbl;
+  pcr_context_base ctx = (pcr_context_base){NULL, {0}};
   int ret = TSS_SUCCESS;
 
   {
-    ret = tss_basic_handle_init(&bh);
+    ret = tpm_ctx_init(&ctx, t);
     if (TSS_SUCCESS != ret)
       return ret;
   }
@@ -181,17 +182,14 @@ int main(int argc, char** argv)
   
   do {
     if(0 == strcmp("read", command)) {
-      char* value = NULL;
-      uint32_t vlen = 0;
-      ret = errout("read pcr value...\n",
-		   readpcr(bh, index, &vlen, &value));
-      if((TSS_SUCCESS == ret)
-	 && (vlen == sizeof(PCR))) {
-	outputpcr(binout, fpout, index, (const PCR*)value);
+      pcr value;
+      ret = tpm_errout(&ctx, "read pcr value...\n",
+		   tpm_pcr_read(&ctx, index, &value));
+      if(TSS_SUCCESS == ret) {
+	outputpcr(binout, fpout, index, &value);
       }else{
 	//something wrong.
       }
-      tss_basic_handle_freemem(bh, value);
     } else if (0 == strcmp("extend", command)) {
       if(!OSSL_init()) {
 	fputs("Error: Unable to init OpenSSL Library!\n",stderr);
@@ -218,48 +216,38 @@ int main(int argc, char** argv)
 
 	
 
-	uint32_t vlen = 0;
-	char* value = NULL;
+	pcr value;
 	char buf[MDBIO_md_size(b)];
 	{
 	  size_t i = 0;
 	  for(; i < fa->num; i++){
 	    MDBIO_feed_file(b, fa->arr[i], 1024);
 	    MDBIO_getmd(b, buf, sizeof(buf));
-	    ret = errout("extend pcr value...\n",
-				     extendpcr(bh, index,
-					       buf, sizeof(buf),
-					       &vlen, &value));
+	    ret = tpm_errout(&ctx, "extend pcr value...\n",
+			 tpm_pcr_extend(&ctx, index,
+				    buf, sizeof(buf),
+				    &value));
 	    if(TSS_SUCCESS != ret){
-	      vlen = 0;
-	      value = NULL;
 	      break;
-	    }
-
-	    if(i < (fa->num - 1)) {
-	      tss_basic_handle_freemem(bh, value);
-	      value = NULL;
 	    }
 	  }
 	}
 
-	if((value != NULL) && (vlen == sizeof(PCR))) {
-	  outputpcr(binout, fpout, index, (const PCR*)value);
-	  tss_basic_handle_freemem(bh, value);
-	} 	
+	outputpcr(binout, fpout, index, &value);
+
       } while (0);
       
       BIO_free(b);
       OSSL_uninit();
     } else if (0 == strcmp("clear", command)) {
-      ret = errout("clear pcr value...\n", resetpcr(bh, index));
+      ret = tpm_errout(&ctx, "clear pcr value...\n", tpm_pcr_reset(&ctx, index));
     } else {
       fprintf(stderr, "command \"%s\" is not supported!\n", command);
       ret = -(EXIT_FAILURE);
     }
   } while (0);
 
-  tss_basic_handle_uninit(&bh);
+  tpm_ctx_uninit(&ctx);
   if (fpout != stdout)
     fclose(fpout);
   

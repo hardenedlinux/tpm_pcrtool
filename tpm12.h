@@ -1,6 +1,6 @@
 /* 
- * tpm.h
- * Functions to operate TPM.
+ * tpm12.h
+ * Functions to operate TPM 1.2.
  * 
  *
  * The program is free software; you can redistribute it and/or
@@ -32,8 +32,8 @@
  * files in the program, then also delete it here.
  */
 
-#ifndef _TPM_H_
-#define _TPM_H_
+#ifndef _TPM12_H_
+#define _TPM12_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,8 +42,7 @@ extern "C" {
 #endif
 #endif
 
-#include <stdio.h>
-#include <stdlib.h>
+#include "tpm_common.h"
 #include <tss/tss_error.h>
 #include <tss/platform.h>
 #include <tss/tss_defines.h>
@@ -53,51 +52,18 @@ extern "C" {
 #include <trousers/trousers.h>
 #include <trousers/tss.h>
 
-#define PCRSIZE 20
 
-typedef char PCR[PCRSIZE];
+typedef struct tpm12_pcr_context {
+  const pcr_vtbl* vtbl;
+  union {
+    struct {
+      TSS_HOBJECT ctx;
+      TSS_HOBJECT tpm;
+    };
+  };
+} tpm12_pcr_context;
 
-static inline TSS_RESULT errout(const char* message, TSS_RESULT res)
-{
-#ifdef TSS_DEBUG
-  fprintf(stderr, "Line%d, %s: %s returned 0x%08x. %s.\n",
-	  __LINE__, __func__, message, res,
-	  (const char *)Trspi_Error_String(res));
-#endif
-  return res;
-}
-
-
-
-typedef struct TSS_BASIC_HANDLES {
-  TSS_HOBJECT ctx;
-  TSS_HOBJECT tpm;
-}TSS_BASIC_HANDLES;
-
-TSS_RESULT tss_basic_handle_init(TSS_BASIC_HANDLES* hdls);
-TSS_RESULT tss_basic_handle_uninit(TSS_BASIC_HANDLES* hdls);
-int fprintpcr(FILE* fp, uint32_t pcr_index, const PCR* pcr_content);
-
-static inline void tss_basic_handle_freemem(TSS_BASIC_HANDLES hdls, void* ptr)
-{
-  Tspi_Context_FreeMemory(hdls.ctx, ptr);
-}
-
-static inline TSS_RESULT readpcr(TSS_BASIC_HANDLES hdls, uint32_t pcr_index, uint32_t* pcrvlen, char** pcrvalue)
-{
-  return Tspi_TPM_PcrRead(hdls.tpm, pcr_index, pcrvlen, (BYTE**)pcrvalue);
-  //free *pcrvalue with tss_basic_handle_freemem
-}
-
-TSS_RESULT extendpcr(TSS_BASIC_HANDLES hdls,
-		     uint32_t pcr_index,
-		     const char* data,
-		     uint32_t datalen,
-		     uint32_t* newvlen,
-		     char** newvalue);
-
-
-TSS_RESULT resetpcr(TSS_BASIC_HANDLES hdls, uint32_t pcr_index);
+extern const pcr_vtbl tpm12_pcr_vtbl;
 
 #ifdef __cplusplus
 #if 0

@@ -96,8 +96,9 @@ static FP_pcr_read(tpm12_pcr_read)
 				  &l,
 				  (BYTE**)&v);
   if((TSS_SUCCESS == ret)
-     && (l == PCRSIZE)) {
-    memcpy(pcrvalue->a, v, PCRSIZE);
+     && (l == TPM1_PCR_SIZE)) {
+    memcpy(pcrvalue->a, v, TPM1_PCR_SIZE);
+    pcrvalue->s = TPM1_PCR_SIZE;
   }
 
   if(v != NULL) {
@@ -130,8 +131,9 @@ static FP_pcr_extend(tpm12_pcr_extend)
 				    &l,
 				    (BYTE**)&v);
   if((TSS_SUCCESS == ret)
-     && (l == PCRSIZE)) {
-    memcpy(newvalue->a, v, PCRSIZE);
+     && (l == TPM1_PCR_SIZE)) {
+    memcpy(newvalue->a, v, TPM1_PCR_SIZE);
+    newvalue->s = TPM1_PCR_SIZE;
   }
 
   if(v != NULL) {

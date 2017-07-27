@@ -1,6 +1,6 @@
 /* 
- * tpm12.h
- * Functions to operate TPM 1.2.
+ * tpm2_md_alg.h
+ * Functions to query hash algorithm compatibility against TPM 2.
  * 
  *
  * The program is free software; you can redistribute it and/or
@@ -32,8 +32,8 @@
  * files in the program, then also delete it here.
  */
 
-#ifndef _TPM12_H_
-#define _TPM12_H_
+#ifndef _TPM2_MD_ALG_H_
+#define _TPM2_MD_ALG_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,32 +42,17 @@ extern "C" {
 #endif
 #endif
 
-#include "tpm_common.h"
-#include <tss/tss_error.h>
-#include <tss/platform.h>
-#include <tss/tss_defines.h>
-#include <tss/tss_typedef.h>
-#include <tss/tss_structs.h>
-#include <tss/tspi.h>
-#include <trousers/trousers.h>
-#include <trousers/tss.h>
+#include <stdbool.h>
+#include <stdlib.h>
 
-#define TPM1_PCR_SIZE 20
+typedef struct tpm2_hashalg_list_item {
+  const char* name;
+  uint32_t id;
+} tpm2_hashalg_list_item;
 
-typedef struct tpm12_pcr_context {
-  const pcr_vtbl* vtbl;
-  union {
-    struct{
-      struct {
-	TSS_HOBJECT ctx;
-	TSS_HOBJECT tpm;
-      };
-      uintptr_t unused;
-    };
-  };
-} tpm12_pcr_context;
+const tpm2_hashalg_list_item* MD_tpm2_checksupport(const char* mdname);
 
-extern const pcr_vtbl tpm12_pcr_vtbl;
+bool parse_selection(const char* s, size_t* count, void** selection);
 
 #ifdef __cplusplus
 #if 0

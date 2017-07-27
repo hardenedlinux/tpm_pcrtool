@@ -32,7 +32,8 @@
  * files in the program, then also delete it here.
  */
 
-#include "tpm12.h"
+#include "tpm_common.h"
+#include "tpm2_md_alg.h"
 #include "md.h"
 #include <stdbool.h>
 #include <stdio.h>
@@ -41,26 +42,50 @@
 #include <unistd.h>
 
 const char usagefmt[]
-= "Usage: %s [option] command index-of-a-pcr [files]\n"
+= "Usage: %s [option] command <index-of-a-pcr or cfgstr> [files]\n"
   "Commands:\n"
   "\n"
   "read - read the value of the pcr whose index is given.\n"
   "extend - extend the value of the pcr with the hashsums\n"
   "\tof given files, and output the new value.\n"
   "clear - reset the value of the pcr to its initial state.\n"
-  "\n"
+  "setalg - (for TPM2 only) enable a bitmap of pcr on the bank of an algorithm,\n"
+  "\tneeds a configure string in \"alg1:map1+alg2:map2...n\" format.\n"
   "Options:\n"
-  "-a - select hash algorithm - default to sha256.\n"
+  "-a - select hash algorithm - default to sha1.\n"
+  "\tnote: on TPM2, algorithm for file must match with pcr's bank algorithm.\n"
   "-b - output pcr value as raw binary, rather than hex string.\n"
-  "-o - write to a file instead of stdout.\n";
+  "-o - write to a file instead of stdout.\n"
+  "Examples:\n"
+  "read the value of pcr 12:\n"
+  "\t%s read 12\n"
+  "read the value of pcr 12 on sha256 bank (for TPM2 only):\n"
+  "\t%s -a sha256 read 12\n"
+  "extend the value of pcr 16 with files:\n"
+  "\t%s extend 12 file1 <file2> ...\n"
+  "clear the value of pcr 17:\n"
+  "\t%s clear 17\n"
+  "clear the value of pcr 17 on sha256 bank (for TPM2 only):\n"
+  "\t%s -a sha256 clear 17\n"
+  "enable pcr 3, 4 on sha256 bank, and pcr 17, 18 on sha384 bank (for TPM2 only):\n"
+  "\t%s setalg sha256:000018+sha384:030000\n";
 
 const char optstr[] = "a:bo:";
+
+extern const pcr_vtbl tpm12_pcr_vtbl;
+extern const pcr_vtbl tpm2_pcr_vtbl;
 
 int outputpcr(bool binary_out,
 	      FILE* fp,
 	      uint32_t pcr_index,
 	      const pcr* pcr_content)
 {
+  if(pcr_content->s == 0) {
+    fprintf(stderr,
+	    "Warning: pcr %u reports no value, which indicates "
+	    "hash algorithm mismatch when accessing tpm2.\n", pcr_index);
+    return 0;
+  }
   if(binary_out)
     return fwrite(pcr_content->a, sizeof(pcr_content->a), 1, fp);
   else
@@ -111,15 +136,24 @@ farr* openfarr(int filec, const char** filev)
 
 int main(int argc, char** argv)
 {
-  const char* alg = "sha256";
+  const char* alg = "sha1";
+  const tpm2_hashalg_list_item* ialg = NULL;
   bool binout = false;
   const char* outfile = NULL;
   const char* command = NULL;
-  int index = 0;
+  uint32_t pcr_index = 24;//for "all pcrs".
+  const char* cfgmap = NULL;
 
   if (argc == 1) {
-    fprintf(stderr, usagefmt,
-		argv[0]);
+    fprintf(stderr,
+	    usagefmt,
+	    argv[0],
+	    argv[0],
+	    argv[0],
+	    argv[0],
+	    argv[0],
+	    argv[0],
+	    argv[0]);
     return 0;
   }
 
@@ -162,41 +196,81 @@ int main(int argc, char** argv)
     
 
   command = argv[optind];
-  index = atoi(argv[optind + 1]);
-  if((index < 0)||(index > 23)) {
-    fprintf(stderr, "PCR index %d is invalid!\n", index);
+  if(argv[optind + 1] == NULL) {
+    fputs("Missing operand!\n", stderr);
     return -(EXIT_FAILURE);
   }
-
+  
+  if(0 != strcmp(command, "setalg")){
+    pcr_index = atoi(argv[optind + 1]);
+    
+    if((pcr_index < 0)||
+       (pcr_index > 23)) {
+      fprintf(stderr, "PCR index %d is invalid!\n", pcr_index);
+      return -(EXIT_FAILURE);
+    }
+  } else {
+    cfgmap = argv[optind + 1];
+  }
+  
   const pcr_vtbl* t = &tpm12_pcr_vtbl;
-  pcr_context_base ctx = (pcr_context_base){NULL, {0}};
-  int ret = TSS_SUCCESS;
+  pcr_context_base ctx = (pcr_context_base){NULL, {{0, 0}}};
+  int ret = 0;
 
   {
+    fputs("Trying to access TPM v1...\n", stderr);
     ret = tpm_ctx_init(&ctx, t);
-    if (TSS_SUCCESS != ret)
-      return ret;
+    if (0 == ret) {
+      fputs("Successful to get access to a tpm1, going ahead...\n", stderr);
+    } else {
+      tpm_ctx_uninit(&ctx);
+      fprintf(stderr,
+	      "0x%x: Unable to get access to a tpm1, try tpm2 instead...\n",
+	      ret);
+      t = &tpm2_pcr_vtbl;
+      ret = tpm_ctx_init(&ctx, t);
+      if (0 == ret) {
+	fputs("Successful to get access to a tpm2, going ahead...\n", stderr);
+	ialg = MD_tpm2_checksupport(alg);
+	if(ialg != NULL) {
+	  tpm_ctx_setalg(&ctx, ialg->id);
+	} else {
+	  alg = NULL;
+	  
+	}
+      } else {
+	fprintf(stderr,
+		"0x%x: Unable to find any supported tpms, exiting.\n",
+		ret);
+	return ret;
+      }
+    }
   }
-
-  
   
   do {
     if(0 == strcmp("read", command)) {
       pcr value;
       ret = tpm_errout(&ctx, "read pcr value...\n",
-		   tpm_pcr_read(&ctx, index, &value));
-      if(TSS_SUCCESS == ret) {
-	outputpcr(binout, fpout, index, &value);
+		   tpm_pcr_read(&ctx, pcr_index, &value));
+      if(0 == ret) {
+	outputpcr(binout, fpout, pcr_index, &value);
       }else{
 	//something wrong.
       }
     } else if (0 == strcmp("extend", command)) {
+      if(alg == NULL) {
+	fprintf(stderr, "TPM2 cannot process the digest of %s!\n", alg);
+	tpm_ctx_uninit(&ctx);
+	ret = -(EXIT_FAILURE);
+	break;
+      }
+
       if(!OSSL_init()) {
 	fputs("Error: Unable to init OpenSSL Library!\n",stderr);
 	ret = EXIT_FAILURE;
 	break;
       }
-      
+
       MDBIO* b = MDBIO_new(alg);
       if(b == NULL) {
 	fprintf(stderr, "Error: Unable to create MDBIO: %s\n",
@@ -224,23 +298,57 @@ int main(int argc, char** argv)
 	    MDBIO_feed_file(b, fa->arr[i], 1024);
 	    MDBIO_getmd(b, buf, sizeof(buf));
 	    ret = tpm_errout(&ctx, "extend pcr value...\n",
-			 tpm_pcr_extend(&ctx, index,
+			 tpm_pcr_extend(&ctx, pcr_index,
 				    buf, sizeof(buf),
 				    &value));
-	    if(TSS_SUCCESS != ret){
+	    if(0 != ret){
 	      break;
 	    }
 	  }
 	}
-
-	outputpcr(binout, fpout, index, &value);
+	if(ret == 0)
+	  outputpcr(binout, fpout, pcr_index, &value);
 
       } while (0);
       
       BIO_free(b);
       OSSL_uninit();
     } else if (0 == strcmp("clear", command)) {
-      ret = tpm_errout(&ctx, "clear pcr value...\n", tpm_pcr_reset(&ctx, index));
+      ret = tpm_errout(&ctx, "clear pcr value...\n", tpm_pcr_reset(&ctx, pcr_index));
+    } else if (0 == strcmp("setalg", command)) {
+      if(t == &tpm12_pcr_vtbl) {
+	fputs("TPM1 does not support to set pcr's algorithm!\n", stderr);
+	ret = -(EXIT_FAILURE);
+	break;
+      }
+
+      size_t count = 0;
+      void* selection = NULL;
+      if(parse_selection(cfgmap, &count, &selection) == false) {
+	fputs("Failed to pass config bitmap!\n", stderr);
+	ret = -(EXIT_FAILURE);
+	break;
+      } else {
+	fprintf(stderr,
+		"%zu bitmap(s) get parsed! settings will be applied.\n",
+		count);
+      }
+      
+      ret = tpm_errout(&ctx, "set pcr algorithm...\n", tpm_pcr_setalg(&ctx, selection));
+      free(selection);
+      if(ret == 0) {
+    
+	  fputs("Config bitmap applied,\n"
+		"which will take effect since the next boot.\n",
+		 stderr);
+	
+	
+		
+      } else if(ret == 0x1c3) {
+	fputs("Config bitmap is not applied,\n"
+	      "for some given algorithm is not supported by the tpm.\n",
+	      stderr);
+      }
     } else {
       fprintf(stderr, "command \"%s\" is not supported!\n", command);
       ret = -(EXIT_FAILURE);

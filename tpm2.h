@@ -1,6 +1,6 @@
 /* 
- * tpm12.h
- * Functions to operate TPM 1.2.
+ * tpm2.h
+ * Functions to operate TPM 2.
  * 
  *
  * The program is free software; you can redistribute it and/or
@@ -32,8 +32,8 @@
  * files in the program, then also delete it here.
  */
 
-#ifndef _TPM12_H_
-#define _TPM12_H_
+#ifndef _TPM2_H_
+#define _TPM2_H_
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,31 +43,21 @@ extern "C" {
 #endif
 
 #include "tpm_common.h"
-#include <tss/tss_error.h>
-#include <tss/platform.h>
-#include <tss/tss_defines.h>
-#include <tss/tss_typedef.h>
-#include <tss/tss_structs.h>
-#include <tss/tspi.h>
-#include <trousers/trousers.h>
-#include <trousers/tss.h>
+#include <sapi/tpm20.h>
+#include <tcti/tcti_device.h>
+#include <tcti/tcti_socket.h>
 
-#define TPM1_PCR_SIZE 20
-
-typedef struct tpm12_pcr_context {
+typedef struct tpm2_pcr_context {
   const pcr_vtbl* vtbl;
   union {
-    struct{
-      struct {
-	TSS_HOBJECT ctx;
-	TSS_HOBJECT tpm;
-      };
-      uintptr_t unused;
+    struct {
+      TSS2_SYS_CONTEXT* ctx;
+      TPMI_ALG_HASH alg;
     };
   };
-} tpm12_pcr_context;
+} tpm2_pcr_context;
 
-extern const pcr_vtbl tpm12_pcr_vtbl;
+extern const pcr_vtbl tpm2_pcr_vtbl;
 
 #ifdef __cplusplus
 #if 0

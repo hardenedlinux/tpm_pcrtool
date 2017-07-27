@@ -49,6 +49,7 @@ extern "C" {
 
 #include <stdio.h>
 #include <stdbool.h>
+#include <string.h>
 
 static inline int OSSL_init(void)
 {

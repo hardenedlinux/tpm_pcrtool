@@ -40,7 +40,7 @@ int fprintpcr(FILE* fp, uint32_t pcr_index, const pcr* pcr_content)
   res += fprintf(fp, "PCR %u:", pcr_index);
   {
     int i;
-    for(i = 0; i < sizeof(pcr_content->a); i++){
+    for(i = 0; i < pcr_content->s; i++){
       res += fprintf(fp, ":%02hhx", pcr_content->a[i]);
     }
   }

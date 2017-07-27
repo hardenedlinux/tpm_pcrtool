@@ -34,8 +34,6 @@
 
 #include "md.h"
 
-
-
 MDBIO* MDBIO_new(const char* mdname)
 {
   BIO* ret = BIO_new(BIO_f_md());

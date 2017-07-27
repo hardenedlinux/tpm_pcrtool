@@ -48,9 +48,10 @@ extern "C" {
 #endif
 #endif
 
-#define PCRSIZE 20
+#define PCRSIZE 64
 
 typedef struct pcr {
+  char s;
   char a[PCRSIZE];
 } pcr;
 
@@ -65,7 +66,7 @@ typedef FP_tpm_errout(fp_tpm_errout);
 typedef struct pcr_context_base {
   const pcr_vtbl* vtbl;
   union {
-    uintptr_t privdata;
+    uintptr_t privdata[2];
   };
 } pcr_context_base;
 
@@ -98,6 +99,18 @@ typedef FP_pcr_reset(fp_pcr_reset);
 
 // functions to implement only for tpm2
 
+#define FP_ctx_setalg(x)				\
+  void (x)(pcr_context_base* ctx,			\
+	       uint32_t alg)
+typedef FP_ctx_setalg(fp_ctx_setalg);
+
+#define FP_pcr_setalg(x)				\
+  uint32_t (x)(pcr_context_base* ctx,			\
+	       const void* selection)
+typedef FP_pcr_setalg(fp_pcr_setalg);
+
+typedef struct tpm2_spec_vtbl tpm2_spec_vtbl;
+
 struct pcr_vtbl {
   const char* tpm_version;
   const tpm2_spec_vtbl* vt2;
@@ -109,6 +122,11 @@ struct pcr_vtbl {
   fp_pcr_read* pcr_read;
   fp_pcr_extend* pcr_extend;
   fp_pcr_reset* pcr_reset;
+};
+
+struct tpm2_spec_vtbl {
+  fp_ctx_setalg* ctx_setalg;
+  fp_pcr_setalg* pcr_setalg;
 };
 
 static inline bool vtbl_isvalid(const pcr_vtbl* t)
@@ -167,6 +185,20 @@ static inline FP_pcr_extend(tpm_pcr_extend)
 static inline FP_pcr_reset(tpm_pcr_reset)
 {
   return ctx->vtbl->pcr_reset(ctx, pcr_index);
+}
+
+static inline FP_pcr_setalg(tpm_pcr_setalg)
+{
+  return ((ctx->vtbl->vt2)?
+	  ctx->vtbl->vt2->pcr_setalg(ctx, selection):
+	  0);
+}
+
+static inline FP_ctx_setalg(tpm_ctx_setalg)
+{
+  if(ctx->vtbl->vt2) {
+    ctx->vtbl->vt2->ctx_setalg(ctx, alg);
+  }
 }
 
 #ifdef __cplusplus

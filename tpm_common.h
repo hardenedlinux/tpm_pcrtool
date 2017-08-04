@@ -48,7 +48,7 @@ extern "C" {
 #endif
 #endif
 
-#define PCRSIZE 64
+#define PCRSIZE 64 //size of digest of sha512, the largest one.
 
 typedef struct pcr {
   char s;
@@ -59,6 +59,35 @@ int fprintpcr(FILE* fp, uint32_t pcr_index, const pcr* pcr_content);
 
 typedef struct pcr_vtbl pcr_vtbl;
 typedef struct tpm2_spec_vtbl tpm2_spec_vtbl;
+
+/*
+ * We are going to implement runtime polymorphism with pure C, with
+ * hand-written "virtual" function table, as OpenSSL does, which means
+ * multiple sets of functions with identical prototypes are going to
+ * be written with hands. 
+ *
+ * C standard allows to "typedef" function prototypes as C types, but
+ * such types are only allowed to declare functions, and (function)
+ * pointers to them. They cannot be used to define any function, for
+ * the name of formal parameters is ignored in function prototypes,
+ * as well as in the types of function prototype.
+ *
+ * But, it is possible to encapsulate a function "prototype"(with named
+ * formal parameters, but without function name) inside a macro like we
+ * did below. Such macros can be used as "types of function" to define 
+ * actual functions.(a lot of inline functions as wrapper are defined 
+ * near the end of this header file could be used as examples for how to
+ * use such form.) we have also "typedef"ed such function prototype macros
+ * as true C types, such C types is used to declare function pointers 
+ * (especially inside a virtual table).
+ *
+ * These forms are believed to be useful in situations where lots of functions
+ * with the same prototypes should be written, for their actual prototype
+ * (with named formal parameters) appears only once in source codes of the
+ * whole project, which eases the process to modify it, and reduce the
+ * possibility to produce prototype-mismatched functions, if copy-and-paste
+ * method are used. YMMV
+ */
 
 #define FP_tpm_errout(x) uint32_t (x)(const char* message, uint32_t ret)
 typedef FP_tpm_errout(fp_tpm_errout);

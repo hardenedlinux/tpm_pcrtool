@@ -37,6 +37,14 @@
 #include <stdarg.h>
 #include <stdio.h>
 
+/*
+ * Contrast to tpm1.2, in which fed data to extend pcr's content can have 
+ * arbitrary length (with a maximum, indeed), in tpm2, such data must have
+ * a length identical to the digest size of the algorithm to be used in the
+ * extention process, so we must implement a list of supported algorithm,
+ * to meet such limitation.
+ */
+
 static const tpm2_hashalg_list_item tpm2_hashalg_supported[] = {
 #ifdef TPM_ALG_SHA
   {"sha", TPM_ALG_SHA},
@@ -55,6 +63,8 @@ static const tpm2_hashalg_list_item tpm2_hashalg_supported[] = {
 #endif
   {NULL, 0}
 };
+
+//This function below is exported via tpm2_me_alg.h.
 
 const tpm2_hashalg_list_item* MD_tpm2_checksupport(const char* mdname)
 {
@@ -90,6 +100,21 @@ static const TSS2_ABI_VERSION abiver
   TSS_SAPI_FIRST_LEVEL,
   TSS_SAPI_FIRST_LEVEL
 };
+
+/*
+ * In tpm2, there are multiple "banks" of digest algorithm, each of which
+ * has 24 pcrs, which operabilities could be configured independently, but
+ * the latter command to configure EVERY pcrs on EVERY banks would override
+ * the former, which means it is unable to set pcr one by one, instead, all
+ * pcrs should be configured with one single command. To do so, we need a
+ * string representation of TPML_PCR_SELECTION for HUMAN invokers to use,
+ * and a function to parse it to the binary representation.
+ *
+ * The string representation is described in pcrtool.c, and the parser 
+ * function is implemented below.
+ *
+ * This function below is exported via tpm2_me_alg.h.
+ */
 
 bool parse_selection(const char* s, size_t* count, void** selection)
 {

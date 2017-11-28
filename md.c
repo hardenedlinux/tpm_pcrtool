@@ -51,7 +51,7 @@ size_t MDBIO_md_size(MDBIO* b)
   const EVP_MD* mdvt = NULL;
   if(false == BIO_get_md(b, &mdvt))
     return 0;
-  return EVP_MD_meth_get_result_size(mdvt);
+  return EVP_MD_size(mdvt);
 }
 
 size_t MDBIO_feed_file(MDBIO* b, FILE* f, size_t buff_size)
